@@ -7,7 +7,7 @@ import csv
 from sklearn.model_selection import train_test_split
 
 # configs globais
-IMG_SIZE = 224
+IMG_SIZE = 300
 BATCH_SIZE = 32
 DATASET_DIR = "dataset/nutrition5k"
 METADATA_DIR = os.path.join(DATASET_DIR, "metadata")

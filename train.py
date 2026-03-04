@@ -17,7 +17,7 @@ def main():
 
     # Compilacao
     model.compile(
-        optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3),
+        optimizer=tf.keras.optimizers.Adam(learning_rate=1e-5),
         
         # Como o modelo tem duas saídas (name='ingredientes' e name='peso'), 
         # temos de lhe dar duas formas de calcular o erro:

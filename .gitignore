@@ -1,3 +1,4 @@
 *.c
 venv/
 dataset/
+logs/

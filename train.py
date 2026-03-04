@@ -77,14 +77,14 @@ def main():
             epochs=30,
             callbacks=callbacks
         )
-        print("\n✅ Treino finalizado normalmente.")
+        print("\nTreino finalizado com sucesso.")
 
     except KeyboardInterrupt:
-        print("\n⚠️ Treino interrompido pelo utilizador (Ctrl+C). A gerar logs parciais...")
+        print("\nTreino interrompido pelo utilizador (Ctrl+C). A gerar logs parciais...")
         history = model.history # Recupera o que foi treinado até agora
     
     except Exception as e:
-        print(f"\n❌ Ocorreu um erro inesperado: {e}")
+        print(f"\nOcorreu um erro inesperado: {e}")
         # Tenta recuperar o histórico se ele existir
         if hasattr(model, 'history'):
             history = model.history

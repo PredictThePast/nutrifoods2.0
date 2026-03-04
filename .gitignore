@@ -2,3 +2,8 @@
 venv/
 dataset/
 __pycache__/
+chckpoints/
+macros.csv
+rgb.png
+test.py
+predict.py

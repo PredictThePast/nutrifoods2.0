@@ -49,8 +49,8 @@ def build_model(num_ingredients, img_size=300): # Atualizado para 300 para mais 
     # Usamos relu porque o peso nunca pode ser negativo (mínimo 0g)
     out_peso = layers.Dense(
         num_ingredients, 
-        activation='relu', # Rectified Linear Unit <=> f(x) = max(0, x); ou seja, devolve sempre o valor maior. 
-                           # Se o valor for negativo devolve 0. Se o valor for positivo, devolve o valor.
+        activation='softplus', # mudei para softplus porque os neuronios morriam com relu porque a maior parte dos ingredientes num prato e 0.
+                           
         name='peso' # <--- Este nome tem de bater com o train.py e data_processing.py
     )(x)
 
@@ -66,7 +66,7 @@ def build_model(num_ingredients, img_size=300): # Atualizado para 300 para mais 
 
 # Pequeno teste ao correr o ficheiro sozinho. se importar, ignora esta parte. o teste so funciona no terminal
 if __name__ == "__main__":
-    m = build_model(100) # Simula 100 ingredientes
+    m = build_model(241) 
     m.summary() # Mostra a estrutura da rede no terminal
 
     # guarda a estrutura da rede num .txt

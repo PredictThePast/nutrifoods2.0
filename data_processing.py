@@ -6,7 +6,7 @@ import json
 import csv
 from sklearn.model_selection import train_test_split
 
-# Configurações globais
+# configs globais
 IMG_SIZE = 224
 BATCH_SIZE = 32
 DATASET_DIR = "dataset/nutrition5k"
@@ -20,7 +20,7 @@ def process_metadata():
 
     all_rows = []
     try:
-        # Lê os dois ficheiros linha a linha, independentemente do seu tamanho
+        # le os dois ficheiros linha a linha, independentemente do seu tamanho
         for filepath in [file_cafe1, file_cafe2]:
             if os.path.exists(filepath):
                 with open(filepath, 'r', encoding='utf-8') as f:
@@ -38,7 +38,7 @@ def process_metadata():
     weights_dict_list = []
 
     for row in all_rows:
-        if not row: # Salta linhas vazias
+        if not row: # salta linhas vazias
             continue
             
         dish_id = str(row[0]).strip()
@@ -53,9 +53,8 @@ def process_metadata():
         ing_names = []
         ing_weights = {}
 
-        # O ciclo mágico: Salta de 7 em 7, com proteção para o tamanho da lista
         for i in range(6, len(row), 7):
-            # Se não houver colunas suficientes para ler o nome e o peso, ou o ID for vazio, paramos
+            # se nao houver colunas suficientes para ler o nome e o peso, ou o ID for vazio, paramos
             if i + 2 >= len(row) or not row[i].strip():
                 break
             
@@ -63,7 +62,7 @@ def process_metadata():
             try:
                 peso_ingrediente = float(row[i+2])
             except ValueError:
-                peso_ingrediente = 0.0 # Salvaguarda caso haja algum erro de formatação no texto
+                peso_ingrediente = 0.0 # salvaguarda caso haja algum erro de formatação no texto
             
             ing_names.append(nome_ingrediente)
             ing_weights[nome_ingrediente] = peso_ingrediente
@@ -79,7 +78,7 @@ def process_metadata():
     vocabulario = sorted(list(todas_as_tags))
     num_ingredients = len(vocabulario)
     
-    print(f"Sucesso! Encontrados {len(image_paths)} pratos válidos com {num_ingredients} ingredientes únicos.")
+    print(f"Encontrados {len(image_paths)} pratos válidos com {num_ingredients} ingredientes únicos.")
 
     os.makedirs("artifacts", exist_ok=True)
     with open("artifacts/nutrition5k_vocab.json", "w") as f:
@@ -97,7 +96,7 @@ def process_metadata():
     return image_paths, multi_hot_labels, multi_mass_labels, num_ingredients, vocabulario
 
 def load_and_preprocess_image(img_path, label_ing, label_weight):
-    """Lê a imagem do disco, dimensiona-a e emparelha-a com os dois rótulos."""
+    #redimensiona a imagem e coloca os rotulos
     img = tf.io.read_file(img_path)
     img = tf.image.decode_image(img, channels=3, expand_animations=False)
     img = tf.image.resize(img, (IMG_SIZE, IMG_SIZE))
@@ -105,14 +104,14 @@ def load_and_preprocess_image(img_path, label_ing, label_weight):
     # Preprocessamento específico da tua B0
     img = tf.keras.applications.efficientnet.preprocess_input(img)
     
-    # IMPORTANTE: Devolve um dicionário que corresponde aos nomes das camadas finais no model.py
+    # IMPORTANTE: Devolve um dicionário que corresponde aos nomes das camadas finais no model.py !!!!!!!!! 
     return img, {"ingredientes": label_ing, "peso": label_weight}
 
 
 def augment(image, labels):
-    """A tua função de Data Augmentation melhorada com rotações para simular telemóvel."""
+    # rodar imagens para simular varios angulos de uma camara de tlm
     image = tf.image.random_flip_left_right(image)
-    image = tf.image.random_flip_up_down(image) # Novo: útil para imagens vistas de cima
+    image = tf.image.random_flip_up_down(image) 
     image = tf.image.random_brightness(image, 0.1)
     image = tf.image.random_contrast(image, 0.9, 1.1)
     
@@ -124,17 +123,17 @@ def augment(image, labels):
 
 
 def build_datasets():
-    # 1. Obter os dados processados do CSV
+    # obter os dados processados do CSV
     paths, labels_ing, labels_weight, num_ingredients, vocab = process_metadata()
     
-    # 2. Divisão de Treino (80%) e Validação (20%) usando o scikit-learn
+    # divisao de treino (80%) e validação (20%) usando o scikit-learn
     X_train, X_val, y_ing_train, y_ing_val, y_weight_train, y_weight_val = train_test_split(
         paths, labels_ing, labels_weight, test_size=0.2, random_state=42
     )
     
     print(f"Dados de Treino: {len(X_train)} | Dados de Validação: {len(X_val)}")
 
-    # 3. Criar as pipelines do TensorFlow
+    # Criar as pipelines do TensorFlow
     AUTOTUNE = tf.data.AUTOTUNE
     
     train_ds = tf.data.Dataset.from_tensor_slices((X_train, y_ing_train, y_weight_train))
@@ -153,7 +152,7 @@ if __name__ == '__main__':
     try:
         print("A iniciar o pipeline de processamento de dados...")
         train_ds, val_ds, num_ingredients, vocab = build_datasets()
-        print("\n O pipeline de dados foi criado sem erros.")
+        print("\n O pipeline de dados foi criado com sucesso.")
     except Exception as e:
         print(f"\n Falha ao construir os datasets.")
         print(f"Detalhes do erro: {e}")

@@ -1,4 +1,4 @@
 *.c
 venv/
 dataset/
-logs/
+__pycache__/

@@ -98,23 +98,42 @@ def main():
         )
 
         # ---------------------------------------------------------
-        # FASE 2: FINE-TUNING (Desbloquear o cérebro da Google)
+        # FASE 2: FINE-TUNING (Desbloquear o cérebro)
         # ---------------------------------------------------------
         print("\n=== FASE 2: FINE-TUNING (A ajustar a EfficientNet) ===")
-        # Desbloquear todas as camadas
+        
+        # 1. Encontrar a EfficientNet dentro do nosso modelo principal
+        base_model = None
         for layer in model.layers:
-            layer.trainable = True
+            if layer.name.startswith('efficientnet'):
+                base_model = layer
+                break
+        
+        # 2. Desbloquear a EfficientNet inteira primeiro...
+        base_model.trainable = True
+        
+        print(f"A EfficientNet tem {len(base_model.layers)} camadas.")            
+        
+        # 3. ...e depois CONGELAR apenas as primeiras 100 camadas!
+        # É ISTO que impede a rede de esquecer o ImageNet.
+        for layer in base_model.layers[:100]:
+            layer.trainable = False
 
-        # Re-compilar com Learning Rate MUITO mais pequena
+        # 4. Garantir que as nossas cabeças (o Ramo 1 e Ramo 2) continuam treináveis
+        for layer in model.layers:
+            if layer.name != base_model.name:
+                layer.trainable = True
+
+        # Re-compilar com Learning Rate MUITO mais pequena (1e-5)
         model.compile(
-            optimizer=tf.keras.optimizers.Adam(learning_rate=1e-5), # <-- LR baixa para não esquecer o ImageNet
+            optimizer=tf.keras.optimizers.Adam(learning_rate=1e-5), 
             loss={
                 "ingredientes": "binary_crossentropy", 
                 "peso": masked_mse
             },
             loss_weights={
                 "ingredientes": 1.0, 
-                "peso": 0.05  # Já podemos aumentar um bocadinho o peso da regressão agora
+                "peso": 0.05  
             },
             metrics={
                 "ingredientes": [

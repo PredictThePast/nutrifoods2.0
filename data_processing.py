@@ -12,6 +12,7 @@ BATCH_SIZE = 32
 DATASET_DIR = "dataset/nutrition5k"
 METADATA_DIR = os.path.join(DATASET_DIR, "metadata")
 IMAGES_DIR = os.path.join(DATASET_DIR, "realsense_overhead")
+
 def process_metadata():
     print("A analisar o CSV à prova de falhas (via módulo nativo csv)...")
     
@@ -95,21 +96,23 @@ def process_metadata():
 
     return image_paths, multi_hot_labels, multi_mass_labels, num_ingredients, vocabulario
 
-def load_and_preprocess_image(img_path, label_ing, label_weight):
-    #redimensiona a imagem e coloca os rotulos
+
+# ---------------------------------------------------------
+# FUNÇÕES DO PIPELINE (SEPARADAS PARA EFICIÊNCIA MATEMÁTICA)
+# ---------------------------------------------------------
+
+def load_image_and_labels(img_path, label_ing, label_weight):
+    """ Passo 1: Apenas carregar a imagem e redimensionar. Sem pré-processamento ainda! """
     img = tf.io.read_file(img_path)
     img = tf.image.decode_image(img, channels=3, expand_animations=False)
     img = tf.image.resize(img, (IMG_SIZE, IMG_SIZE))
     
-    # Preprocessamento específico da tua B0
-    img = tf.keras.applications.efficientnet.preprocess_input(img)
-    
     # IMPORTANTE: Devolve um dicionário que corresponde aos nomes das camadas finais no model.py !!!!!!!!! 
     return img, {"ingredientes": label_ing, "peso": label_weight}
 
-
-def augment(image, labels):
-    # rodar imagens para simular varios angulos de uma camara de tlm
+def augment_and_preprocess(image, labels):
+    """ Passo 2: Aplicar distorções e SÓ NO FIM aplicar o pré-processamento da EfficientNet """
+    # rodar imagens para simular varios angulos de uma camara de tlm (Aumento)
     image = tf.image.random_flip_left_right(image)
     image = tf.image.random_flip_up_down(image) 
     image = tf.image.random_brightness(image, 0.1)
@@ -119,8 +122,20 @@ def augment(image, labels):
     random_rot = tf.random.uniform(shape=[], minval=0, maxval=4, dtype=tf.int32)
     image = tf.image.rot90(image, k=random_rot)
     
+    # Pré-processamento específico da tua B0 (Fica no fim para não distorcer os cálculos matemáticos)
+    image = tf.keras.applications.efficientnet.preprocess_input(image)
+    
     return image, labels
 
+def preprocess_only(image, labels):
+    """ Passo 3 (Para Validação): A validação não leva aumento de dados, apenas o pré-processamento """
+    image = tf.keras.applications.efficientnet.preprocess_input(image)
+    return image, labels
+
+
+# ---------------------------------------------------------
+# CONSTRUÇÃO DOS DATASETS
+# ---------------------------------------------------------
 
 def build_datasets():
     # obter os dados processados do CSV
@@ -136,13 +151,21 @@ def build_datasets():
     # Criar as pipelines do TensorFlow
     AUTOTUNE = tf.data.AUTOTUNE
     
+    # --- PIPELINE DE TREINO ---
     train_ds = tf.data.Dataset.from_tensor_slices((X_train, y_ing_train, y_weight_train))
-    train_ds = train_ds.map(load_and_preprocess_image, num_parallel_calls=AUTOTUNE)
-    train_ds = train_ds.map(augment, num_parallel_calls=AUTOTUNE)
-    train_ds = train_ds.shuffle(1000).batch(BATCH_SIZE).prefetch(AUTOTUNE)
+    
+    # O Shuffle é feito logo no início para baralhar apenas caminhos de texto (poupa muita RAM!)
+    train_ds = train_ds.shuffle(len(X_train))
+    
+    train_ds = train_ds.map(load_image_and_labels, num_parallel_calls=AUTOTUNE)
+    train_ds = train_ds.map(augment_and_preprocess, num_parallel_calls=AUTOTUNE)
+    train_ds = train_ds.batch(BATCH_SIZE).prefetch(AUTOTUNE)
 
+    # --- PIPELINE DE VALIDAÇÃO ---
     val_ds = tf.data.Dataset.from_tensor_slices((X_val, y_ing_val, y_weight_val))
-    val_ds = val_ds.map(load_and_preprocess_image, num_parallel_calls=AUTOTUNE)
+    
+    val_ds = val_ds.map(load_image_and_labels, num_parallel_calls=AUTOTUNE)
+    val_ds = val_ds.map(preprocess_only, num_parallel_calls=AUTOTUNE) # Validação usa apenas o pré-processamento limpo
     val_ds = val_ds.batch(BATCH_SIZE).prefetch(AUTOTUNE)
 
     return train_ds, val_ds, num_ingredients, vocab
@@ -152,7 +175,7 @@ if __name__ == '__main__':
     try:
         print("A iniciar o pipeline de processamento de dados...")
         train_ds, val_ds, num_ingredients, vocab = build_datasets()
-        print("\n O pipeline de dados foi criado com sucesso.")
+        print("\nO pipeline de dados foi criado com sucesso.")
     except Exception as e:
-        print(f"\n Falha ao construir os datasets.")
+        print(f"\nFalha ao construir os datasets.")
         print(f"Detalhes do erro: {e}")

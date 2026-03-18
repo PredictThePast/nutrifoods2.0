@@ -1,12 +1,7 @@
 import tensorflow as tf
 from tensorflow.keras import layers, models
-import tensorflow as tf
-from tensorflow.keras import layers, models
 
-import tensorflow as tf
-from tensorflow.keras import layers, models
-
-def build_model(num_ingredients, img_size=300): # Atualizado para 300 para mais detalhe
+def build_model(num_ingredients, img_size=300): 
     print(f"A construir modelo multi-saída para {num_ingredients} ingredientes")
 
     # Backbone: EfficientNetB0
@@ -17,44 +12,40 @@ def build_model(num_ingredients, img_size=300): # Atualizado para 300 para mais 
         weights='imagenet'
     )
 
-    # ATIVAMOS O FINE-TUNING: Desbloqueamos o modelo base para a máxima potência.
-    # Isto permite que a rede ajuste o que já sabe da Google para o teu caso específico de comida.
-    base_model.trainable = True 
+    # Bloqueamos o modelo base no início (Fine-Tuning Seguro).
+    base_model.trainable = False 
 
-    # Camada de ligacao
-    # Transforma o mapa de características 2D num vetor 1D que o cérebro entende
+    # Camada de ligação (Pooling comum)
     x = layers.GlobalAveragePooling2D()(base_model.output)
-    
-    # Uma camada intermedia para ajudar a processar a informação antes da divisão. 512 neuronios
-    x = layers.Dense(512, activation='relu')(x)
-    
-    # Evita que o modelo decore os dados (overfitting). desliga 30% dos neuronios aleatoriamente
-    x = layers.Dropout(0.3)(x) 
 
-    # ---------------------------------------------------------
-    # CABEÇA 1: Classificação de Ingredientes (Probabilidades)
-    # ---------------------------------------------------------
-    # Usamos sigmoid porque um prato pode ter VÁRIOS ingredientes ao mesmo tempo
+    # =========================================================
+    # RAMO 1: Classificação de Ingredientes (Nomes)
+    # =========================================================
+    # Uma parte do "cérebro" dedicada a cores e texturas
+    x_class = layers.Dense(512, activation='relu')(x)
+    x_class = layers.Dropout(0.3)(x_class)
+    
     out_ingredientes = layers.Dense(
         num_ingredients, 
         activation='sigmoid', # sigmoid garante que o numero que o modelo devolve esta dentro de 0 e 1.
-                              # Ao contrario de por exemplo, o softmax que so pode ter uma classe a 99%, 
-                              # o sigmoid permite varias. Ideal para classificar varios ingredientes (Multi-label)
-        name='ingredientes' # <--- Este nome tem de bater com o train.py e data_processing.py
-    )(x)
+                              # Ideal para classificar varios ingredientes (Multi-label)
+        name='ingredientes'   # <--- Este nome tem de bater com o train.py e data_processing.py
+    )(x_class)
 
-    # ---------------------------------------------------------
-    # CABEÇA 2: Regressão de Pesos Individuais (Gramas)
-    # ---------------------------------------------------------
-    # Usamos relu porque o peso nunca pode ser negativo (mínimo 0g)
+    # =========================================================
+    # RAMO 2: Regressão de Pesos Individuais (Gramas)
+    # =========================================================
+    # Outra parte do "cérebro" dedicada a área e volume
+    x_weight = layers.Dense(512, activation='relu')(x)
+    x_weight = layers.Dropout(0.3)(x_weight)
+    
     out_peso = layers.Dense(
         num_ingredients, 
-        activation='softplus', # mudei para softplus porque os neuronios morriam com relu porque a maior parte dos ingredientes num prato e 0.
-                           
-        name='peso' # <--- Este nome tem de bater com o train.py e data_processing.py
-    )(x)
+        activation='softplus', # softplus evita que os neuronios morram (como na relu) com muitos pesos a 0g
+        name='peso'            # <--- Este nome tem de bater com o train.py e data_processing.py
+    )(x_weight)
 
-    # UNIR TUDO. declarar o model completo
+    # UNIR TUDO. Declarar o model completo
     model = models.Model(
         inputs=base_model.input, 
         outputs=[out_ingredientes, out_peso]
@@ -63,8 +54,7 @@ def build_model(num_ingredients, img_size=300): # Atualizado para 300 para mais 
     print("Arquitetura do modelo finalizada com sucesso")
     return model
 
-
-# Pequeno teste ao correr o ficheiro sozinho. se importar, ignora esta parte. o teste so funciona no terminal
+# Pequeno teste ao correr o ficheiro sozinho.
 if __name__ == "__main__":
     m = build_model(241) 
     m.summary() # Mostra a estrutura da rede no terminal

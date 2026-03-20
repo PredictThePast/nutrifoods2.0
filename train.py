@@ -5,13 +5,13 @@ from model import build_model
 import matplotlib.pyplot as plt
 import pandas as pd
 
-# Acelera o treino (otimização de compilador XLA)
+# Acelera o treino (otimização de compilador XLA para GPU)
 tf.config.optimizer.set_jit(True)
 
 # =========================================================
 # Funcao para o peso (MASKED LOSS)
 # =========================================================
-@tf.keras.saving.register_keras_serializable(name="masked_mse")
+@tf.keras.utils.register_keras_serializable(name="masked_mse")
 def masked_mse(y_true, y_pred):
     """
     Calcula o erro das gramas APENAS para os ingredientes 
@@ -23,12 +23,13 @@ def masked_mse(y_true, y_pred):
     return tf.reduce_sum(masked_error) / (tf.reduce_sum(mask) + 1e-7)
 
 def main():
-    print("A preparar o Pipeline de Dados")
+    print("A preparar o Pipeline de Dados...")
     # Vai buscar os dados empacotados e prontos a entrar na rede
     train_ds, val_ds, num_ingredients, vocab = build_datasets()
 
-    print(f"\nA construir o cerebro para {num_ingredients} ingredientes")
-    model = build_model(num_ingredients)
+    print(f"\nA construir o cérebro para {num_ingredients} ingredientes...")
+    # RECEBEMOS A BASE DIRETAMENTE: Acaba a busca às escuras por nomes de camadas!
+    model, base_model = build_model(num_ingredients)
 
     # Callbacks/ Checkpoints
     os.makedirs("checkpoints", exist_ok=True)
@@ -60,7 +61,6 @@ def main():
         # ---------------------------------------------------------
         print("\n=== FASE 1: WARM-UP (A treinar apenas as novas cabeças) ===")
         
-        # Compilacao
         model.compile(
             optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3),
             
@@ -68,7 +68,7 @@ def main():
             # temos de lhe dar duas formas de calcular o erro:
             loss={
                 "ingredientes": "binary_crossentropy", # Puniçao pesada se falhar a probabilidade (0 a 1)
-                "peso": masked_mse                     # A nossa Loss inteligente (substitui o 'mae' puro)
+                "peso": masked_mse                     # A nossa Loss inteligente
             },
             
             # O erro das gramas pode ser 100 ou 200. O erro da probabilidade é tipo 0.5.
@@ -90,7 +90,7 @@ def main():
         )
 
         # Treino Fase 1
-        history_fase1 = model.fit(
+        model.fit(
             train_ds,
             validation_data=val_ds,
             epochs=5,
@@ -98,33 +98,24 @@ def main():
         )
 
         # ---------------------------------------------------------
-        # FASE 2: FINE-TUNING (Desbloquear o cérebro)
+        # FASE 2: FINE-TUNING (Usando a referencia direta da base)
         # ---------------------------------------------------------
-        print("\n=== FASE 2: FINE-TUNING (A ajustar a EfficientNet) ===")
+        print("\n=== FASE 2: FINE-TUNING (Ajuste Fino da EfficientNet) ===")
         
-        # 1. Encontrar a EfficientNet dentro do nosso modelo principal
-        base_model = None
-        for layer in model.layers:
-            if layer.name.startswith('efficientnet'):
-                base_model = layer
-                break
-        
-        # 2. Desbloquear a EfficientNet inteira primeiro...
+        # Desbloqueamos o objeto base_model que recebemos do model.py
         base_model.trainable = True
+        print(f"A desbloquear {base_model.name}...")
         
-        print(f"A EfficientNet tem {len(base_model.layers)} camadas.")            
-        
-        # 3. ...e depois CONGELAR apenas as primeiras 100 camadas!
-        # É ISTO que impede a rede de esquecer o ImageNet.
+        # Congelar as primeiras 100 camadas para preservar os filtros basicos (ImageNet)
         for layer in base_model.layers[:100]:
             layer.trainable = False
 
-        # 4. Garantir que as nossas cabeças (o Ramo 1 e Ramo 2) continuam treináveis
+        # Garantir que as cabeças continuam abertas
         for layer in model.layers:
-            if layer.name != base_model.name:
+            if layer != base_model:
                 layer.trainable = True
 
-        # Re-compilar com Learning Rate MUITO mais pequena (1e-5)
+        # Re-compilar com Learning Rate MUITO mais pequena (ajuste cirúrgico)
         model.compile(
             optimizer=tf.keras.optimizers.Adam(learning_rate=1e-5), 
             loss={
@@ -155,28 +146,24 @@ def main():
 
     except KeyboardInterrupt:
         print("\nTreino interrompido pelo utilizador (Ctrl+C). A gerar logs parciais...")
-        history = model.history # Recupera o que foi treinado até agora
+        history = model.history 
     
     except Exception as e:
         print(f"\nOcorreu um erro inesperado: {e}")
-        # Tenta recuperar o histórico se ele existir
         if hasattr(model, 'history'):
             history = model.history
         else:
-            return # Sai se não houver mesmo nada para salvar
+            return 
 
-    # --- FASE DE LOGS (Executa mesmo se houver interrupção) ---
+    # --- FASE DE LOGS E GRÁFICOS ---
     try:
-        print("A guardar métricas e gráficos...")
-        
-        # Guardar CSV
+        print("\nA guardar métricas e gráficos...")
         hist_df = pd.DataFrame(history.history)
         hist_df.to_csv("logs/historico_final_detalhado.csv", index=False)
 
-        # Criar gráficos
         plt.figure(figsize=(12, 5))
         
-        # Gráfico 1: Loss
+        # Grafico da Perda (Loss)
         plt.subplot(1, 2, 1)
         if 'loss' in history.history:
             plt.plot(history.history['loss'], label='Treino')
@@ -184,7 +171,7 @@ def main():
             plt.title('Evolução do Erro (Loss)')
             plt.legend()
 
-        # Gráfico 2: Accuracy
+        # Grafico da Precisão (Accuracy)
         plt.subplot(1, 2, 2)
         if 'ingredientes_acc' in history.history:
             plt.plot(history.history['ingredientes_acc'], label='Treino')
@@ -194,7 +181,6 @@ def main():
 
         plt.tight_layout()
         plt.savefig("logs/grafico_treino.png")
-        
         print("Logs e gráficos guardados na pasta 'logs/'.")
         
     except Exception as log_error:

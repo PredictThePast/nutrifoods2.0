@@ -52,7 +52,7 @@ def build_model(num_ingredients, img_size=300):
     )
 
     print("Arquitetura do modelo finalizada com sucesso")
-    return model
+    return model, base_model
 
 # Pequeno teste ao correr o ficheiro sozinho.
 if __name__ == "__main__":
